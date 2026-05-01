@@ -1,0 +1,300 @@
+-- ===============================
+-- DROP TABLES (for re-run safely)
+-- ===============================
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS insurance_claims;
+DROP TABLE IF EXISTS insurance;
+DROP TABLE IF EXISTS doctor_schedule;
+DROP TABLE IF EXISTS admissions;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS bills;
+DROP TABLE IF EXISTS treatments;
+DROP TABLE IF EXISTS appointments;
+DROP TABLE IF EXISTS doctors;
+DROP TABLE IF EXISTS departments;
+DROP TABLE IF EXISTS patients;
+
+-- ===============================
+-- CREATE TABLES
+-- ===============================
+
+CREATE TABLE patients (
+    patient_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    age INTEGER,
+    gender TEXT,
+    phone TEXT
+);
+
+CREATE TABLE departments (
+    department_id INTEGER PRIMARY KEY,
+    department_name TEXT NOT NULL
+);
+
+CREATE TABLE doctors (
+    doctor_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    specialization TEXT,
+    department_id INTEGER,
+    FOREIGN KEY (department_id) REFERENCES departments(department_id)
+);
+
+CREATE TABLE appointments (
+    appointment_id INTEGER PRIMARY KEY,
+    patient_id INTEGER,
+    doctor_id INTEGER,
+    appointment_date DATE,
+    status TEXT,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
+    FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
+);
+
+CREATE TABLE treatments (
+    treatment_id INTEGER PRIMARY KEY,
+    appointment_id INTEGER,
+    description TEXT,
+    cost REAL,
+    FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id)
+);
+
+CREATE TABLE bills (
+    bill_id INTEGER PRIMARY KEY,
+    patient_id INTEGER,
+    total_amount REAL,
+    bill_date DATE,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
+);
+
+CREATE TABLE payments (
+    payment_id INTEGER PRIMARY KEY,
+    bill_id INTEGER,
+    amount_paid REAL,
+    payment_date DATE,
+    FOREIGN KEY (bill_id) REFERENCES bills(bill_id)
+);
+
+CREATE TABLE rooms (
+    room_id INTEGER PRIMARY KEY,
+    room_type TEXT,
+    cost_per_day REAL,
+    is_available INTEGER
+);
+
+CREATE TABLE admissions (
+    admission_id INTEGER PRIMARY KEY,
+    patient_id INTEGER,
+    room_id INTEGER,
+    admission_date DATE,
+    discharge_date DATE,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
+    FOREIGN KEY (room_id) REFERENCES rooms(room_id)
+);
+
+CREATE TABLE doctor_schedule (
+    schedule_id INTEGER PRIMARY KEY,
+    doctor_id INTEGER,
+    available_date DATE,
+    start_time TEXT,
+    end_time TEXT,
+    FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
+);
+
+CREATE TABLE insurance (
+    insurance_id INTEGER PRIMARY KEY,
+    provider_name TEXT,
+    coverage_percentage REAL
+);
+
+CREATE TABLE insurance_claims (
+    claim_id INTEGER PRIMARY KEY,
+    patient_id INTEGER,
+    bill_id INTEGER,
+    insurance_id INTEGER,
+    claim_amount REAL,
+    claim_status TEXT,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
+    FOREIGN KEY (bill_id) REFERENCES bills(bill_id),
+    FOREIGN KEY (insurance_id) REFERENCES insurance(insurance_id)
+);
+
+CREATE TABLE audit_log (
+    log_id INTEGER PRIMARY KEY,
+    action TEXT,
+    table_name TEXT,
+    action_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===============================
+-- TRIGGER
+-- ===============================
+CREATE TRIGGER patient_insert_log
+AFTER INSERT ON patients
+BEGIN
+    INSERT INTO audit_log(action, table_name)
+    VALUES ('INSERT','patients');
+END;
+
+-- ===============================
+-- INSERT SAMPLE DATA
+-- ===============================
+
+INSERT INTO patients VALUES
+(1,'Ravi',30,'M','9999999991'),
+(2,'Anita',25,'F','9999999992'),
+(3,'Kiran',40,'M','9999999993'),
+(4,'Sita',35,'F','9999999994');
+
+INSERT INTO departments VALUES
+(1,'Cardiology'),
+(2,'Neurology'),
+(3,'Orthopedics');
+
+INSERT INTO doctors VALUES
+(1,'Dr. Sharma','Cardiologist',1),
+(2,'Dr. Mehta','Neurologist',2),
+(3,'Dr. Rao','Orthopedic',3);
+
+INSERT INTO appointments VALUES
+(1,1,1,'2026-01-01','Completed'),
+(2,2,2,'2026-01-02','Completed'),
+(3,3,3,'2026-01-03','Pending'),
+(4,1,2,'2026-01-04','Completed');
+
+INSERT INTO treatments VALUES
+(1,1,'Heart Checkup',5000),
+(2,2,'Brain Scan',7000),
+(3,3,'Bone Treatment',4000),
+(4,4,'Neuro Consultation',3000);
+
+INSERT INTO bills VALUES
+(1,1,8000,'2026-01-01'),
+(2,2,7000,'2026-01-02'),
+(3,3,4000,'2026-01-03');
+
+INSERT INTO payments VALUES
+(1,1,3000,'2026-01-02'),
+(2,2,7000,'2026-01-03');
+
+INSERT INTO rooms VALUES
+(1,'General',1000,1),
+(2,'ICU',5000,1),
+(3,'Private',3000,1);
+
+INSERT INTO admissions VALUES
+(1,1,1,'2026-01-01',NULL),
+(2,2,2,'2026-01-02','2026-01-05');
+
+INSERT INTO doctor_schedule VALUES
+(1,1,'2026-01-10','09:00','12:00'),
+(2,2,'2026-01-10','10:00','01:00');
+
+INSERT INTO insurance VALUES
+(1,'LIC',80),
+(2,'Star Health',70);
+
+INSERT INTO insurance_claims VALUES
+(1,1,1,1,6400,'Approved'),
+(2,2,2,2,4900,'Pending');
+
+-- ===============================
+-- VIEWS
+-- ===============================
+
+CREATE VIEW patient_billing_summary AS
+SELECT 
+    p.name,
+    SUM(b.total_amount) AS total_bill,
+    IFNULL(SUM(pay.amount_paid),0) AS total_paid
+FROM patients p
+LEFT JOIN bills b ON p.patient_id = b.patient_id
+LEFT JOIN payments pay ON b.bill_id = pay.bill_id
+GROUP BY p.name;
+
+CREATE VIEW doctor_performance AS
+SELECT 
+    d.name,
+    COUNT(a.appointment_id) AS total_appointments
+FROM doctors d
+LEFT JOIN appointments a ON d.doctor_id = a.doctor_id
+GROUP BY d.name;
+
+-- ===============================
+-- ADVANCED QUERIES
+-- ===============================
+
+-- MULTI JOIN
+SELECT 
+    p.name AS patient,
+    d.name AS doctor,
+    dept.department_name,
+    t.description,
+    b.total_amount
+FROM patients p
+JOIN appointments a ON p.patient_id = a.patient_id
+JOIN doctors d ON a.doctor_id = d.doctor_id
+JOIN departments dept ON d.department_id = dept.department_id
+JOIN treatments t ON a.appointment_id = t.appointment_id
+JOIN bills b ON p.patient_id = b.patient_id;
+
+-- WINDOW FUNCTION
+SELECT 
+    d.name,
+    COUNT(a.appointment_id) AS total_patients,
+    RANK() OVER (ORDER BY COUNT(a.appointment_id) DESC) AS rank
+FROM doctors d
+JOIN appointments a ON d.doctor_id = a.doctor_id
+GROUP BY d.name;
+
+-- SUBQUERY
+SELECT name
+FROM patients
+WHERE patient_id IN (
+    SELECT patient_id
+    FROM bills
+    GROUP BY patient_id
+    HAVING SUM(total_amount) > (SELECT AVG(total_amount) FROM bills)
+);
+
+-- ROOM OCCUPANCY
+SELECT 
+    r.room_type,
+    COUNT(a.admission_id) AS occupied
+FROM rooms r
+LEFT JOIN admissions a ON r.room_id = a.room_id
+WHERE a.discharge_date IS NULL
+GROUP BY r.room_type;
+
+-- INSURANCE
+SELECT 
+    p.name,
+    b.total_amount,
+    i.coverage_percentage,
+    (b.total_amount * i.coverage_percentage / 100) AS covered_amount
+FROM patients p
+JOIN bills b ON p.patient_id = b.patient_id
+JOIN insurance_claims ic ON b.bill_id = ic.bill_id
+JOIN insurance i ON ic.insurance_id = i.insurance_id;
+
+-- TOP DEPARTMENTS
+SELECT 
+    dept.department_name,
+    SUM(t.cost) AS revenue
+FROM departments dept
+JOIN doctors d ON dept.department_id = d.department_id
+JOIN appointments a ON d.doctor_id = a.doctor_id
+JOIN treatments t ON a.appointment_id = t.appointment_id
+GROUP BY dept.department_name
+ORDER BY revenue DESC
+LIMIT 3;
+
+-- PENDING PAYMENTS
+SELECT 
+    p.name,
+    SUM(b.total_amount) AS total_bill,
+    IFNULL(SUM(pay.amount_paid),0) AS paid
+FROM patients p
+JOIN bills b ON p.patient_id = b.patient_id
+LEFT JOIN payments pay ON b.bill_id = pay.bill_id
+GROUP BY p.name
+HAVING paid < total_bill;
